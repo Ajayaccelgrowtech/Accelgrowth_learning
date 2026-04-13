@@ -17,9 +17,15 @@ const steps = [
 
 const validationSchemas = [
   Yup.object({
-    fullName: Yup.string().required('Full name is required').min(3, 'Too short'),
+    fullName: Yup.string()
+      .trim()
+      .required('Full name is required')
+      .min(2, 'Name is too short')
+      .matches(/^[a-zA-Z\s]+$/, 'Full name can only contain letters and spaces'),
     email: Yup.string().email('Invalid email').required('Email is required'),
-    phone: Yup.string().required('Phone is required').matches(/^[0-9+ ]+$/, 'Invalid digits'),
+    phone: Yup.string()
+      .required('Phone is required')
+      .matches(/^[6-9]\d{9}$/, 'Phone number must be exactly 10 digits (e.g., 9876543210)'),
   }),
   Yup.object({
     occupation: Yup.string().required('Please select an occupation'),
@@ -29,35 +35,59 @@ const validationSchemas = [
   Yup.object({}),
 ];
 
+// Helper component to persist form values
+const FormObserver = () => {
+  const { values } = useFormikContext();
+  React.useEffect(() => {
+    localStorage.setItem('form-values', JSON.stringify(values));
+  }, [values]);
+  return null;
+};
+
 const MultiStepForm = () => {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(() => {
+    const savedStep = localStorage.getItem('form-step');
+    return savedStep ? parseInt(savedStep, 10) : 1;
+  });
+  
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedData, setSubmittedData] = useState({});
   const isLastStep = currentStep === steps.length;
 
-  const initialValues = {
-    fullName: '',
-    email: '',
-    phone: '',
-    occupation: '',
-    portfolio: '',
-    linkedin: '',
-  };
+  const initialValues = React.useMemo(() => {
+    const savedValues = localStorage.getItem('form-values');
+    return savedValues ? JSON.parse(savedValues) : {
+      fullName: '',
+      email: '',
+      phone: '',
+      occupation: '',
+      portfolio: '',
+      linkedin: '',
+    };
+  }, []);
 
   const handleBack = () => {
     if (currentStep > 1) {
-      setCurrentStep((prev) => prev - 1);
+      const prevStep = currentStep - 1;
+      setCurrentStep(prevStep);
+      localStorage.setItem('form-step', prevStep.toString());
     }
   };
 
   const handleSubmit = (values, { setSubmitting }) => {
     if (!isLastStep) {
-      setCurrentStep((prev) => prev + 1);
+      const nextStep = currentStep + 1;
+      setCurrentStep(nextStep);
+      localStorage.setItem('form-step', nextStep.toString());
+      localStorage.setItem('form-values', JSON.stringify(values));
       setSubmitting(false);
     } else {
       setSubmittedData(values);
       setShowSuccess(true);
       setSubmitting(false);
+      // Clear persistence on final submission
+      localStorage.removeItem('form-step');
+      localStorage.removeItem('form-values');
     }
   };
 
@@ -71,12 +101,14 @@ const MultiStepForm = () => {
           validationSchema={validationSchemas[currentStep - 1]}
           onSubmit={handleSubmit}
           validateOnMount={false}
+          enableReinitialize={true}
         >
           {({ values, errors, touched, setFieldValue, setFieldTouched, isSubmitting }) => {
             const CurrentStepComponent = steps[currentStep - 1].component;
             
             return (
               <Form className="mt-12 relative min-h-[400px] flex flex-col">
+                <FormObserver />
                 <div className="flex-grow">
                   <AnimatePresence mode="wait">
                     <motion.div
